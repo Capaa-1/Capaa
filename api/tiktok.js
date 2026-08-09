@@ -1,103 +1,94 @@
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
+  if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({
       message: "Method not allowed"
     });
   }
 
-  const raw = Array.isArray(req.query.url)
-    ? req.query.url[0]
-    : req.query.url;
+  const raw =
+    req.method === "GET"
+      ? req.query?.url
+      : req.body?.url;
 
-  if (!raw) {
+  const url = Array.isArray(raw) ? raw[0] : raw;
+
+  if (!url) {
     return res.status(400).json({
       message: "URL TikTok wajib diisi"
     });
   }
 
-  let input;
+  let tiktokUrl;
 
   try {
-    input = new URL(raw);
+    tiktokUrl = new URL(url);
   } catch {
     return res.status(400).json({
-      message: "URL TikTok tidak valid"
+      message: "URL tidak valid"
     });
   }
 
-  if (!input.hostname.includes("tiktok.com")) {
+  const hostname = tiktokUrl.hostname.toLowerCase();
+
+  if (
+    !hostname.endsWith("tiktok.com") &&
+    hostname !== "vm.tiktok.com" &&
+    hostname !== "vt.tiktok.com"
+  ) {
     return res.status(400).json({
       message: "URL harus berasal dari TikTok"
     });
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-
   try {
-    const apiUrl =
-      "https://www.tikwm.com/api/?url=" +
-      encodeURIComponent(input.href) +
-      "&hd=1";
+    const body = new URLSearchParams();
+    body.set("url", url);
+    body.set("hd", "1");
 
-    const upstream = await fetch(apiUrl, {
-      method: "GET",
+    const response = await fetch("https://www.tikwm.com/api/", {
+      method: "POST",
       headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
+        "Content-Type":
+          "application/x-www-form-urlencoded; charset=UTF-8",
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36",
+        "Accept": "application/json"
       },
-      signal: controller.signal
+      body: body.toString()
     });
 
-    if (!upstream.ok) {
+    if (!response.ok) {
       return res.status(502).json({
-        message: "Layanan downloader sedang bermasalah"
+        message: "Layanan video sedang bermasalah"
       });
     }
 
-    const json = await upstream.json();
+    const json = await response.json();
 
     if (json.code !== 0 || !json.data) {
-      return res.status(400).json({
-        message:
-          json.msg ||
-          "Video tidak ditemukan atau tidak tersedia"
-      });
-    }
-
-    const data = json.data;
-
-    const videoUrl =
-      data.hdplay ||
-      data.play ||
-      data.wmplay;
-
-    if (!videoUrl) {
       return res.status(404).json({
-        message: "Link video tidak tersedia"
+        message:
+          json.msg || "Data video tidak ditemukan"
       });
     }
 
     return res.status(200).json({
       success: true,
-      title: data.title || "TikTok Video",
-      cover: data.cover || "",
-      video: videoUrl,
-      music: data.music || ""
+      data: {
+        title: json.data.title || "",
+        cover: json.data.cover || "",
+        video: json.data.play || "",
+        hd: json.data.hdplay || json.data.play || "",
+        watermark: json.data.wmplay || "",
+        music: json.data.music || ""
+      }
     });
 
   } catch (error) {
-    if (error.name === "AbortError") {
-      return res.status(504).json({
-        message: "Permintaan terlalu lama"
-      });
-    }
+    console.error(error);
 
-    return res.status(502).json({
-      message: "Gagal menghubungi layanan downloader"
+    return res.status(500).json({
+      message: "Gagal menghubungi layanan video"
     });
-
-  } finally {
-    clearTimeout(timeout);
   }
 }
