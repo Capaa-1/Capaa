@@ -4,11 +4,9 @@ export default async function handler(req, res) {
       message: "Method not allowed"
     });
   }
-
   const raw = Array.isArray(req.query.url)
     ? req.query.url[0]
     : req.query.url;
-
   if (!raw) {
     return res.status(400).json({
       message: "URL TikTok wajib diisi"
