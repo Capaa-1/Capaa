@@ -7,14 +7,13 @@ export default async function handler(req, res) {
   const raw = Array.isArray(req.query.url)
     ? req.query.url[0]
     : req.query.url;
+
   if (!raw) {
     return res.status(400).json({
       message: "URL TikTok wajib diisi"
     });
   }
-
   let input;
-
   try {
     input = new URL(raw);
   } catch {
@@ -22,22 +21,18 @@ export default async function handler(req, res) {
       message: "URL TikTok tidak valid"
     });
   }
-
   if (!input.hostname.includes("tiktok.com")) {
     return res.status(400).json({
       message: "URL harus berasal dari TikTok"
     });
   }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
-
   try {
     const apiUrl =
       "https://www.tikwm.com/api/?url=" +
       encodeURIComponent(input.href) +
       "&hd=1";
-
     const upstream = await fetch(apiUrl, {
       method: "GET",
       headers: {
@@ -46,15 +41,12 @@ export default async function handler(req, res) {
       },
       signal: controller.signal
     });
-
     if (!upstream.ok) {
       return res.status(502).json({
         message: "Layanan downloader sedang bermasalah"
       });
     }
-
     const json = await upstream.json();
-
     if (json.code !== 0 || !json.data) {
       return res.status(400).json({
         message:
@@ -62,20 +54,16 @@ export default async function handler(req, res) {
           "Video tidak ditemukan atau tidak tersedia"
       });
     }
-
     const data = json.data;
-
     const videoUrl =
       data.hdplay ||
       data.play ||
       data.wmplay;
-
     if (!videoUrl) {
       return res.status(404).json({
         message: "Link video tidak tersedia"
       });
     }
-
     return res.status(200).json({
       success: true,
       title: data.title || "TikTok Video",
@@ -83,14 +71,12 @@ export default async function handler(req, res) {
       video: videoUrl,
       music: data.music || ""
     });
-
   } catch (error) {
     if (error.name === "AbortError") {
       return res.status(504).json({
         message: "Permintaan terlalu lama"
       });
     }
-
     return res.status(502).json({
       message: "Gagal menghubungi layanan downloader"
     });
